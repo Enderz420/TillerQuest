@@ -12,6 +12,7 @@ import { auth } from "./middleware/auth.js";
 import rateLimit from "express-rate-limit";
 import cron from "node-cron";
 import { randomCosmic } from "./data/cosmic.js";
+import { DiceRoll } from "@dice-roller/rpg-dice-roller";
 import {
   damageValidator,
   experienceAndLevelValidator,
@@ -596,6 +597,11 @@ cron.schedule(
         select: {
           guildName: true,
           name: true,
+          enemy: {
+            select: {
+              attack: true,
+            },
+          },
         },
       });
 
@@ -617,9 +623,13 @@ cron.schedule(
             guildName: true,
           },
         });
-
+        const enemyDamage = rollDice(enemy.enemy.attack);
         for (const user of users) {
-          const damageToTake = await damageValidator(db, user.id, 5);
+          const damageToTake = await damageValidator(
+            db,
+            user.id,
+            enemyDamage.total,
+          );
           await db.user.update({
             where: { id: user.id },
             data: {
@@ -651,6 +661,21 @@ console.log("Started cron jobs:");
 cron.getTasks().forEach((task, name) => {
   console.log(` - ${name}`);
 });
+
+const rollDice = (diceNotation: string) => {
+  const roll = new DiceRoll(diceNotation);
+  // @ts-expect-error - the package's export function is not typed correctly
+  return roll.export(exportFormats.OBJECT) as {
+    averageTotal: number;
+    maxTotal: number;
+    minTotal: number;
+    notation: string;
+    output: string;
+    // rolls: any[];
+    total: number;
+    type: string;
+  };
+};
 
 server.listen(8080, () => {
   console.log("🚀 Server is running at http://localhost:8080");
